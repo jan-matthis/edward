@@ -53,7 +53,7 @@ class DirichletProcess(RandomVariable, Distribution):
         self._base = self._base_cls(*self._base_args, **self._base_kwargs)
         # Define atoms of Dirichlet process, storing only the first as default.
         self._theta = tf.expand_dims(
-            self._base.sample(self.get_batch_shape()), 0)
+            self._base.sample(self.batch_shape), 0)
 
         super(DirichletProcess, self).__init__(
             dtype=tf.int32,
@@ -117,8 +117,8 @@ class DirichletProcess(RandomVariable, Distribution):
     if seed is not None:
       raise NotImplementedError("seed is not implemented.")
 
-    batch_shape = self.get_batch_shape().as_list()
-    event_shape = self.get_event_shape().as_list()
+    batch_shape = self.batch_shape.as_list()
+    event_shape = self.event_shape.as_list()
     rank = 1 + len(batch_shape) + len(event_shape)
     # Note this is for scoping within the while loop's body function.
     self._temp_scope = [n, batch_shape, event_shape, rank]
