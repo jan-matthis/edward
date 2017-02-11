@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from edward.models.random_variable import RandomVariable
 from edward.models.random_variables import Bernoulli, Beta
-from tensorflow.contrib.distributions import Distribution
+from tensorflow.contrib.distributions import Distribution, NOT_REPARAMETERIZED
 
 
 class DirichletProcess(RandomVariable, Distribution):
@@ -41,7 +41,6 @@ class DirichletProcess(RandomVariable, Distribution):
     >>> assert dp.get_shape() == (2, 5, 3)
     """
     parameters = locals()
-    parameters.pop("self")
     with tf.name_scope(name, values=[alpha]) as ns:
       with tf.control_dependencies([]):
         self._alpha = tf.identity(alpha, name="alpha")
@@ -58,7 +57,7 @@ class DirichletProcess(RandomVariable, Distribution):
         super(DirichletProcess, self).__init__(
             dtype=tf.int32,
             is_continuous=False,
-            is_reparameterized=False,
+            reparameterization_type=NOT_REPARAMETERIZED,
             validate_args=validate_args,
             allow_nan_stats=allow_nan_stats,
             parameters=parameters,
@@ -78,16 +77,16 @@ class DirichletProcess(RandomVariable, Distribution):
     needed."""
     return self._theta
 
-  def _batch_shape(self):
+  def _batch_shape_tensor(self):
     return tf.shape(self.alpha)
 
-  def _get_batch_shape(self):
+  def _batch_shape(self):
     return self.alpha.get_shape()
 
-  def _event_shape(self):
+  def _event_shape_tensor(self):
     return tf.shape(self._base)
 
-  def _get_event_shape(self):
+  def _event_shape(self):
     return self._base.get_shape()
 
   def _sample_n(self, n, seed=None):
