@@ -7,8 +7,7 @@ import tensorflow as tf
 
 from edward.inferences.map import MAP
 from edward.models import \
-    MultivariateNormalCholesky, MultivariateNormalDiag, \
-    MultivariateNormalFull, PointMass, RandomVariable
+    MultivariateNormalDiag, MultivariateNormalTriL, PointMass, RandomVariable
 from edward.util import get_session, get_variables
 
 
@@ -31,11 +30,10 @@ class Laplace(MAP):
                   dict of RandomVariable to RandomVariable
       Collection of random variables to perform inference on. If list,
       each random variable will be implictly optimized using a
-      ``MultivariateNormalCholesky`` random variable that is defined
+      ``MultivariateNormalTriL`` random variable that is defined
       internally (with unconstrained support). If dictionary, each
-      random variable must be a ``MultivariateNormalCholesky``,
-      ``MultivariateNormalFull``, or ``MultivariateNormalDiag`` random
-      variable.
+      random variable must be a ``MultivariateNormalDiag`` or
+      ``MultivariateNormalTriL`` random variable.
 
     Notes
     -----
@@ -48,29 +46,29 @@ class Laplace(MAP):
     Examples
     --------
     >>> X = tf.placeholder(tf.float32, [N, D])
-    >>> w = Normal(mu=tf.zeros(D), sigma=tf.ones(D))
-    >>> y = Normal(mu=ed.dot(X, w), sigma=tf.ones(N))
+    >>> w = Normal(loc=tf.zeros(D), scale=tf.ones(D))
+    >>> y = Normal(loc=ed.dot(X, w), scale=tf.ones(N))
     >>>
-    >>> qw = MultivariateNormalFull(mu=tf.Variable(tf.random_normal([D])),
-    >>>                             sigma=tf.Variable(tf.random_normal([D, D])))
+    >>> qw = MultivariateNormalTriL(
+    >>>     mu=tf.Variable(tf.random_normal([D])),
+    >>>     scale_tril=tf.Variable(tf.random_normal([D, D])))
     >>>
     >>> inference = ed.Laplace({w: qw}, data={X: X_train, y: y_train})
     """
     if isinstance(latent_vars, list):
       with tf.variable_scope("posterior"):
-        latent_vars = {rv: MultivariateNormalCholesky(
-            mu=tf.Variable(tf.random_normal(rv.batch_shape())),
-            chol=tf.Variable(tf.random_normal(
+        latent_vars = {rv: MultivariateNormalTriL(
+            loc=tf.Variable(tf.random_normal(rv.batch_shape())),
+            scale_tril=tf.Variable(tf.random_normal(
                 rv.get_batch_shape().concatenate(rv.get_batch_shape()[-1]))))
             for rv in latent_vars}
     elif isinstance(latent_vars, dict):
       for qz in six.itervalues(latent_vars):
         if not isinstance(
-            qz, (MultivariateNormalCholesky, MultivariateNormalDiag,
-                 MultivariateNormalFull)):
+            qz, (MultivariateNormalDiag, MultivariateNormalTriL)):
           raise TypeError("Posterior approximation must consist of only "
-                          "MultivariateCholesky, MultivariateNormalDiag, "
-                          "or MultivariateNormalFull random variables.")
+                          "MultivariateNormalDiag or MultivariateTriL "
+                          "random variables.")
 
     # call grandparent's method; avoid parent (MAP)
     super(MAP, self).__init__(latent_vars, data)
@@ -80,7 +78,7 @@ class Laplace(MAP):
     # optimize ``PointMass`` random variables, which subsequently
     # optimizes mean parameters of the normal approximations.
     latent_vars_normal = self.latent_vars.copy()
-    self.latent_vars = {z: PointMass(params=qz.mu)
+    self.latent_vars = {z: PointMass(params=qz.loc)
                         for z, qz in six.iteritems(latent_vars_normal)}
 
     super(Laplace, self).initialize(*args, **kwargs)
@@ -89,15 +87,15 @@ class Laplace(MAP):
     self.finalize_ops = []
     for z, hessian in zip(six.iterkeys(self.latent_vars), hessians):
       qz = latent_vars_normal[z]
-      sigma_var = get_variables(qz.sigma)[0]
+      scale_var = get_variables(qz.scale)[0]
       if isinstance(qz, MultivariateNormalCholesky):
-        sigma = tf.matrix_inverse(tf.cholesky(hessian))
+        scale = tf.matrix_inverse(tf.cholesky(hessian))
       elif isinstance(qz, MultivariateNormalDiag):
-        sigma = 1.0 / tf.diag_part(hessian)
+        scale = 1.0 / tf.diag_part(hessian)
       else:  # qz is MultivariateNormalFull
-        sigma = tf.matrix_inverse(hessian)
+        scale = tf.matrix_inverse(hessian)
 
-      self.finalize_ops.append(sigma_var.assign(sigma))
+      self.finalize_ops.append(scale_var.assign(scale))
 
     self.latent_vars = latent_vars_normal.copy()
     del latent_vars_normal

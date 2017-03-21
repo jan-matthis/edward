@@ -43,6 +43,7 @@ def mvn_plot_contours(z, label=False, ax=None):
 ed.set_seed(42)
 
 # MODEL
+# TODO
 z = MultivariateNormalFull(mu=tf.ones(2),
                            cov=tf.constant([[1.0, 0.8], [0.8, 1.0]]))
 
